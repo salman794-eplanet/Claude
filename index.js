@@ -19,6 +19,7 @@ const shopify = shopifyApi({
   isEmbeddedApp: false,
 });
 
+// 2. MCP Server Definition
 const mcpServer = new Server({
   name: "shopify-bridge",
   version: "1.0.0",
@@ -26,50 +27,59 @@ const mcpServer = new Server({
   capabilities: { tools: {} },
 });
 
-// 2. Tools List
+// 3. Define Tools for Claude
 mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "get_products",
-      description: "List all products in the store",
+      description: "Fetch all products from the Shopify store",
       inputSchema: { type: "object", properties: {} }
     },
     {
       name: "get_orders",
-      description: "List recent orders",
+      description: "Fetch the latest orders from the Shopify store",
       inputSchema: { type: "object", properties: {} }
     }
   ],
 }));
 
-// 3. Execution Logic (Wohi part jo pehle miss hua)
+// 4. Handle Tool Execution (Logic)
 mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
   const session = await shopify.session.customAppSession(process.env.SHOPIFY_STORE);
-  session.accessToken = process.env.SHOPIFY_ACCESS_TOKEN; // Force set token
-
-  const client = new shopify.clients.Rest({session});
+  session.accessToken = process.env.SHOPIFY_ACCESS_TOKEN; // Force the token
   
+  const client = new shopify.clients.Rest({session});
+  const { name: toolName } = request.params;
+
   try {
-    if (request.params.name === "get_products") {
-      const products = await client.get({path: 'products'});
-      return { content: [{ type: "text", text: JSON.stringify(products.body.products) }] };
+    if (toolName === "get_products") {
+      const response = await client.get({ path: 'products' });
+      return { 
+        content: [{ type: "text", text: `Found ${response.body.products.length} products: ` + JSON.stringify(response.body.products) }] 
+      };
     }
     
-    if (request.params.name === "get_orders") {
-      const orders = await client.get({path: 'orders'});
-      return { content: [{ type: "text", text: JSON.stringify(orders.body.orders) }] };
+    if (toolName === "get_orders") {
+      const response = await client.get({ path: 'orders' });
+      return { 
+        content: [{ type: "text", text: `Found ${response.body.orders.length} orders: ` + JSON.stringify(response.body.orders) }] 
+      };
     }
-    
-    throw new Error("Tool not found");
+
+    return {
+      content: [{ type: "text", text: `Tool '${toolName}' not found. Available: get_products, get_orders` }],
+      isError: true
+    };
+
   } catch (error) {
     return {
-      content: [{ type: "text", text: "Shopify Error: " + error.message }],
+      content: [{ type: "text", text: "Shopify API Error: " + error.message }],
       isError: true
     };
   }
 });
 
-// 4. Transport setup
+// 5. SSE & Express Endpoints
 let transport;
 app.get("/sse", async (req, res) => {
   transport = new SSEServerTransport("/messages", res);
@@ -77,9 +87,12 @@ app.get("/sse", async (req, res) => {
 });
 
 app.post("/messages", async (req, res) => {
-  if (transport) await transport.handlePostMessage(req, res);
+  if (transport) {
+    await transport.handlePostMessage(req, res);
+  }
 });
 
-app.get('/', (req, res) => res.send('Bridge is Online!'));
+// Landing Page for health check
+app.get('/', (req, res) => res.send('<h1>Shopify Bridge is LIVE!</h1><p>Connect Claude to /sse</p>'));
 
-app.listen(port, () => console.log(`Server running on ${port}`));
+app.listen(port, () => console.log(`Bridge server running on port ${port}`));
