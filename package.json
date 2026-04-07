@@ -1,6 +1,7 @@
 {
   "name": "shopify-claude-bridge",
   "version": "1.0.0",
+  "description": "Full access bridge between Shopify and Claude via MCP",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,5 +11,8 @@
     "@shopify/shopify-api": "^11.0.0",
     "express": "^4.19.2",
     "dotenv": "^16.4.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
